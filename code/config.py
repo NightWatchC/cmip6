@@ -7,7 +7,7 @@ model filters, or calendars, edit this file. The .env file is no longer read.
 
 from pathlib import Path
 
-PROJECT_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = Path(__file__).resolve().parents[1]
 
 # ---------------------------------------------------------------------------
 # Paths (relative to this config file, or absolute)
@@ -17,6 +17,18 @@ OUTPUT_DIR = PROJECT_DIR / "output"
 TEMP_DIR = PROJECT_DIR / "temp"
 TEMP_PARQUET_DIR = TEMP_DIR / "parquet_temps"
 COUNTY_COORDINATE_FILE = PROJECT_DIR / "data/CountyCoordinate.dta"
+
+# ---------------------------------------------------------------------------
+# Overlap-weighted extraction output paths
+# ---------------------------------------------------------------------------
+OVERLAP_OUTPUT_DIR = PROJECT_DIR / "output_overlap"
+OVERLAP_WEIGHT_DIR = OVERLAP_OUTPUT_DIR / "weights"
+OVERLAP_FINAL_DIR = OVERLAP_OUTPUT_DIR / "final"
+OVERLAP_LOG_DIR = OVERLAP_OUTPUT_DIR / "logs"
+OVERLAP_TEMP_DIR = OVERLAP_OUTPUT_DIR / "temp"
+
+# County boundary shapefile for polygon overlap weighting
+COUNTY_SHAPEFILE = PROJECT_DIR / "data/boundary/xian_rename.shp"
 
 # ---------------------------------------------------------------------------
 # Scenarios to process
@@ -44,6 +56,6 @@ MODEL_CALENDAR = {
     "TaiESM1": "noleap",
     "MRI-ESM2-0": "proleptic_gregorian",
     "MPI-ESM1-2-HR": "proleptic_gregorian",
-    "IPSL-CM6A-LR": "noleap",
+    "IPSL-CM6A-LR": "proleptic_gregorian",
     "CanESM5": "noleap",
 }

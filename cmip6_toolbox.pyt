@@ -2,19 +2,21 @@
 """
 CMIP6 Processing Toolbox for ArcGIS Pro.
 
-Provides a script tool to compute county-level daily mean near-surface
-air temperature from CMIP6 NetCDF files. ArcPy is used only for the
-GUI parameter layer — all processing is delegated to process_cmip6.py.
+Provides a script tool to extract daily near-surface air temperature from the
+CMIP6 grid cell containing each county centroid. ArcPy is used only for the
+GUI parameter layer — all processing is delegated to code/process_cmip6.py.
 """
 
 import os
 import sys
 import arcpy
 
-# Ensure the toolbox directory is on sys.path
+# Ensure project source modules are on sys.path
 _TOOLBOX_DIR = os.path.dirname(os.path.abspath(__file__))
-if _TOOLBOX_DIR not in sys.path:
-    sys.path.insert(0, _TOOLBOX_DIR)
+_CODE_DIR = os.path.join(_TOOLBOX_DIR, "code")
+for _path in (_CODE_DIR, _TOOLBOX_DIR):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
 
 
 class Toolbox:
@@ -23,21 +25,22 @@ class Toolbox:
         self.alias = "cmip6"
         self.description = (
             "Tools for processing CMIP6 daily near-surface air temperature "
-            "data into county-level Parquet tables."
+            "data into county-level centroid grid-cell Parquet tables."
         )
         self.tools = [ProcessCountyDailyTas]
 
 
 class ProcessCountyDailyTas:
-    """Compute county-level daily mean temperature from CMIP6 NetCDF files."""
+    """Extract county centroid-contained grid-cell temperature."""
 
     def __init__(self):
-        self.label = "Process County Daily Temperature"
+        self.label = "Process County Centroid Grid Temperature"
         self.description = (
             "For each model-scenario combination, extract daily county-level "
             "near-surface air temperature (tas) from CMIP6 NetCDF files using "
-            "centroid-based cell matching. Outputs one Parquet table per "
-            "model-scenario pair."
+            "the rectilinear grid cell containing each county centroid. "
+            "Outputs one Parquet table per model-scenario pair plus grid-cell "
+            "audit tables."
         )
         self.canRunInBackground = True
         self.category = "Climate"

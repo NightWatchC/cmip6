@@ -17,3 +17,5 @@ CLAUDE.md
 process.log
 
 .env
+
+output_overlap/
