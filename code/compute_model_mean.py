@@ -60,6 +60,7 @@ def compute_scenario_mean(
     county_column: str,
     file_suffix_strip: str,
     output_dir: Path,
+    output_county_column: str = "NAME",
 ) -> Optional[str]:
     """Aggregate across models for one scenario and write the output Parquet."""
     files = get_model_files(scenario, input_dir, file_pattern)
@@ -109,12 +110,12 @@ def compute_scenario_mean(
         COPY (
             SELECT
                 date,
-                county AS "NAME",
+                county AS "{output_county_column}",
                 AVG(model_tas)::FLOAT8 AS tas_mean_k,
                 COUNT(*)::BIGINT AS n_candidate_models
             FROM ({union_sql})
             GROUP BY date, county
-            ORDER BY date, "NAME"
+            ORDER BY date, "{output_county_column}"
         ) TO '{out_path.as_posix()}' (FORMAT PARQUET, COMPRESSION ZSTD)
         """
     )
@@ -140,7 +141,8 @@ def main(passed_args: Optional[list] = None) -> int:
         input_dir = OVERLAP_FINAL_DIR
         file_pattern = "*_{scenario}_county_daily_tas_overlap.parquet"
         temp_column = "tas_mean_k"
-        county_column = "NAME"
+        county_column = "PAC"
+        output_county_column = "PAC"
         file_suffix_strip = "_{scenario}_county_daily_tas_overlap"
         output_dir = OVERLAP_FINAL_DIR
         logger.info("Using overlap-weighted pipeline outputs from %s", input_dir)
@@ -149,6 +151,7 @@ def main(passed_args: Optional[list] = None) -> int:
         file_pattern = "*_{scenario}_county_daily_tas.parquet"
         temp_column = "tas_centroid_grid_k"
         county_column = "county"
+        output_county_column = "NAME"
         file_suffix_strip = "_{scenario}_county_daily_tas"
         output_dir = OUTPUT_DIR
         logger.info("Using centroid-based pipeline outputs from %s", input_dir)
@@ -159,12 +162,14 @@ def main(passed_args: Optional[list] = None) -> int:
             input_dir=input_dir, file_pattern=file_pattern,
             temp_column=temp_column, county_column=county_column,
             file_suffix_strip=file_suffix_strip, output_dir=output_dir,
+            output_county_column=output_county_column,
         )
         compute_scenario_mean(
             scenario, exclude_ipsl=True,
             input_dir=input_dir, file_pattern=file_pattern,
             temp_column=temp_column, county_column=county_column,
             file_suffix_strip=file_suffix_strip, output_dir=output_dir,
+            output_county_column=output_county_column,
         )
 
     # Log GFDL-CM4 absence from ssp126

@@ -21,7 +21,7 @@ It replaces the previous centroid-based extraction method.
 ### County Boundary Polygons
 - **Path:** `data/boundary/xian_rename.shp`
 - **CRS:** WGS84 (EPSG:4326)
-- **Key field:** `NAME` (county name, Chinese characters)
+- **Identifying index:** `PAC` (numeric administrative code). The `NAME` field (Chinese characters) is also retained as descriptive context.
 
 ### CMIP6 NetCDF Files
 - **Location:** `data/{model}/{scenario}/tas_day_*.nc`
@@ -77,7 +77,8 @@ This is the key optimization: weights are computed **once per model-grid** and r
 |---|---|---|
 | model | string | CMIP6 model name |
 | grid_label | string | Grid variant (gn, gr, gr1, gr2) |
-| NAME | string | County name from shapefile |
+| PAC | string | County administrative code (identifying index) |
+| NAME | string | County name (Chinese characters) |
 | lat_idx | int64 | 0-based index into grid lat array |
 | lon_idx | int64 | 0-based index into grid lon array |
 | grid_lat_center | float64 | Grid cell center latitude (degrees) |
@@ -104,7 +105,7 @@ For each NetCDF file:
 4. For each time step: `weighted_temps = W @ tas_2d.ravel()`
    - This is a single sparse matrix-vector multiplication
    - Very fast (< 1ms per time step for typical grids)
-5. Write temp Parquet with columns: `date`, `NAME`, `tas_mean_k`
+5. Write temp Parquet with columns: `date`, `PAC`, `NAME`, `tas_mean_k`
 
 #### Date Handling
 

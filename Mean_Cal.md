@@ -38,7 +38,7 @@ output/ssp585_model_mean_without_IPSL-CM6A-LR.parquet
 | Column | Type | Description |
 |---|---|---|
 | `date` | `string` | Date in YYYY-MM-DD format |
-| `NAME` | `string` | County identifier |
+| `PAC` | `string` | County administrative code (overlap mode) / `NAME` (centroid mode) |
 | `tas_mean_k` | `float64` | Cross-model mean daily temperature in Kelvin |
 | `n_candidate_models` | `int64` | Number of non-missing model values for that county-date |
 
@@ -108,7 +108,7 @@ then counting the number of contributing models in the outer aggregation.
 ### Example
 
 ```
-date        NAME    n_candidate_models
+date        PAC    n_candidate_models
 2015-01-15  CountyA  11
 2015-02-28  CountyA  11
 2015-02-29  CountyA   3    (only proleptic_gregorian models)

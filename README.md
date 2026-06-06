@@ -51,7 +51,8 @@ output_overlap/final/{model}_{scenario}_county_daily_tas_overlap.parquet
 | Column | Type | Description |
 |---|---|---|
 | `date` | `date32` or `string` | `string` used only for `360_day` calendars |
-| `NAME` | `string` | County name from shapefile |
+| `PAC` | `string` | County administrative code (identifying index) |
+| `NAME` | `string` | County name (Chinese characters) |
 | `tas_mean_k` | `float32` | Area-weighted daily temperature in Kelvin |
 
 ## Quick Start (Centroid-Based — Legacy)
@@ -87,7 +88,7 @@ This produces 6 output tables (3 scenarios x 2 IPSL-CM6A-LR inclusion versions):
 | Column | Type | Description |
 |---|---|---|
 | `date` | `string` | Date in YYYY-MM-DD format |
-| `NAME` | `string` | County identifier |
+| `PAC` | `string` | County administrative code (identifying index) |
 | `tas_mean_k` | `float64` | Cross-model mean daily temperature in Kelvin |
 | `n_candidate_models` | `int64` | Number of non-missing model values used |
 

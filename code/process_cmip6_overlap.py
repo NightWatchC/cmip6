@@ -519,12 +519,19 @@ def compute_one_weight_table(
     n_counties = len(county_gdf)
     county_areas = np.empty(n_counties, dtype=np.float64)
     county_names = []
+    county_pacs = []
     for pos_idx, (_, row) in enumerate(county_gdf.iterrows()):
         county_areas[pos_idx] = _geodesic_polygon_area(row.geometry, geod)
         name_val = row["NAME"]
         if not isinstance(name_val, str):
             name_val = str(name_val) if pd.notna(name_val) else f"county_{pos_idx}"
         county_names.append(name_val)
+        pac_val = row["PAC"]
+        if pd.notna(pac_val):
+            pac_val = str(int(pac_val))
+        else:
+            pac_val = f"pac_{pos_idx}"
+        county_pacs.append(pac_val)
 
     # Find intersections and compute overlap weights
     records = []
@@ -532,6 +539,7 @@ def compute_one_weight_table(
 
     for pos_idx, (_, crow) in enumerate(county_gdf.iterrows()):
         cname = crow["NAME"]
+        cpac = county_pacs[pos_idx]
         cgeom = crow.geometry
         carea = county_areas[pos_idx]
 
@@ -580,6 +588,7 @@ def compute_one_weight_table(
                 "model": model,
                 "grid_label": grid_label,
                 "county_idx": pos_idx,
+                "PAC": cpac,
                 "NAME": cname,
                 "lat_idx": int(grow.lat_idx),
                 "lon_idx": int(grow.lon_idx),
@@ -603,15 +612,17 @@ def compute_one_weight_table(
     # duplicates correctly).
     weight_sums = weight_df.groupby("county_idx")["overlap_weight"].sum()
     for cidx, wsum in weight_sums.items():
-        cname = county_names[int(cidx)]
+        cn = county_names[int(cidx)]
+        cp = county_pacs[int(cidx)]
         if abs(wsum - 1.0) > 0.01 and abs(wsum - 1.0) < 0.05:
-            logger.debug("  County %s (idx=%d) weight sum = %.6f (small deviation)",
-                         cname, int(cidx), wsum)
+            logger.debug("  County PAC=%s NAME=%s (idx=%d) weight sum = %.6f "
+                        "(small deviation)",
+                        cp, cn, int(cidx), wsum)
         elif abs(wsum - 1.0) >= 0.05:
-            logger.info("  County %s (idx=%d) weight sum = %.6f "
+            logger.info("  County PAC=%s NAME=%s (idx=%d) weight sum = %.6f "
                         "(significant deviation — "
                         "may be partially outside model domain)",
-                        cname, int(cidx), wsum)
+                        cp, cn, int(cidx), wsum)
 
     # Log counties with zero coverage
     missing_indices = np.where(~covered_indices)[0]
@@ -619,7 +630,8 @@ def compute_one_weight_table(
         logger.warning("Counties with zero overlap for %s/%s: %d",
                        model, grid_label, len(missing_indices))
         for mi in missing_indices[:10]:
-            logger.warning("  - idx=%d: %s", int(mi), county_names[int(mi)])
+            logger.warning("  - idx=%d: PAC=%s NAME=%s",
+                          int(mi), county_pacs[int(mi)], county_names[int(mi)])
         if len(missing_indices) > 10:
             logger.warning("  ... and %d more", len(missing_indices) - 10)
 
@@ -649,13 +661,17 @@ def compute_all_weight_tables(
     county_gdf = gpd.read_file(str(COUNTY_SHAPEFILE))
 
     # Handle encoding — the shapefile may use GBK for Chinese characters
-    if "NAME" not in county_gdf.columns:
-        logger.error("Shapefile missing NAME column. Available: %s",
-                     list(county_gdf.columns))
-        raise KeyError("NAME column not found in shapefile")
+    for required_col in ("PAC", "NAME"):
+        if required_col not in county_gdf.columns:
+            logger.error("Shapefile missing %s column. Available: %s",
+                         required_col, list(county_gdf.columns))
+            raise KeyError(f"{required_col} column not found in shapefile")
 
     logger.info("  %d counties loaded, CRS: %s", len(county_gdf), county_gdf.crs)
-    logger.info("  County NAME examples: %s", county_gdf["NAME"].head(5).tolist())
+    logger.info("  County PAC examples: %s",
+                county_gdf["PAC"].head(5).tolist())
+    logger.info("  County NAME examples: %s",
+                county_gdf["NAME"].head(5).tolist())
 
     # Ensure valid geometries
     invalid_mask = ~county_gdf.geometry.is_valid
@@ -699,14 +715,15 @@ def _build_sparse_weight_matrix(
     n_counties: int,
     nlat: int,
     nlon: int,
-) -> tuple[csr_matrix, list[str]]:
+) -> tuple[csr_matrix, list[str], list[str]]:
     """Build a sparse CSR weight matrix W of shape (n_counties, nlat * nlon).
 
     W[i, lat_idx * nlon + lon_idx] = overlap_weight for county at position i.
     County positions are taken from the 'county_idx' column in the weight table.
 
-    Returns (sparse_matrix, county_names_list) where county_names_list[i] is
-    the NAME of county at position i.
+    Returns (sparse_matrix, county_pac_list, county_names_list) where
+    county_pac_list[i] is the PAC and county_names_list[i] is the NAME
+    of county at position i.
     """
     n_cells = nlat * nlon
 
@@ -721,24 +738,30 @@ def _build_sparse_weight_matrix(
         col_indices.append(ci)
         data.append(float(row["overlap_weight"]))
 
-    # Build county names list ordered by position.
-    # Guard against NaN NAME values from shapefile encoding issues.
+    # Build county identifier lists ordered by position.
+    # Guard against NaN values from shapefile encoding issues.
+    pac_map = {}
     name_map = {}
     for _, row in weight_df.iterrows():
         idx = int(row["county_idx"])
-        if idx not in name_map:
+        if idx not in pac_map:
+            pac_val = row["PAC"]
+            if not isinstance(pac_val, str):
+                pac_val = str(int(pac_val)) if pd.notna(pac_val) else f"pac_{idx}"
+            pac_map[idx] = pac_val
             name_val = row["NAME"]
             if not isinstance(name_val, str):
                 name_val = str(name_val) if pd.notna(name_val) else f"county_{idx}"
             name_map[idx] = name_val
+    county_pac_list = [pac_map.get(i, f"pac_{i}") for i in range(n_counties)]
     county_names_list = [name_map.get(i, f"county_{i}") for i in range(n_counties)]
 
     if not row_indices:
-        return csr_matrix((n_counties, n_cells), dtype=np.float64), county_names_list
+        return csr_matrix((n_counties, n_cells), dtype=np.float64), county_pac_list, county_names_list
 
     W = csr_matrix((data, (row_indices, col_indices)),
                    shape=(n_counties, n_cells), dtype=np.float64)
-    return W, county_names_list
+    return W, county_pac_list, county_names_list
 
 
 def process_one_file(
@@ -779,8 +802,9 @@ def process_one_file(
         return None
 
     # Build sparse weight matrix
-    W, county_names = _build_sparse_weight_matrix(weight_df, n_counties_total, nlat, nlon)
-    n_counties = len(county_names)
+    W, county_pacs, county_names = _build_sparse_weight_matrix(
+        weight_df, n_counties_total, nlat, nlon)
+    n_counties = len(county_pacs)
 
     # Validate grid against weight table
     lat_values = np.asarray(ds[lat_var].values, dtype=np.float64)
@@ -853,13 +877,14 @@ def process_one_file(
             flat_tas = tas_2d.ravel().astype(np.float64)
             weighted = W.dot(flat_tas)  # (n_counties,) in float64
 
-            chunk_dates = [dates[t_start + t]] * len(county_names)
+            chunk_dates = [dates[t_start + t]] * n_counties
             all_chunks.append(pa.table({
                 "date": pa.array(chunk_dates, type=date_type),
+                "PAC": pa.array(county_pacs, type=pa.string()),
                 "NAME": pa.array(county_names, type=pa.string()),
                 "tas_mean_k": pa.array(weighted, type=pa.float32()),
             }))
-            total_rows += len(county_names)
+            total_rows += n_counties
 
     ds.close()
 
@@ -992,7 +1017,8 @@ def run_qc_checks(
         n_over_one = (weight_sums > 1.01).sum()
         n_ok = n_total - n_zero - n_partial - n_over_one
 
-        # Build a idx->NAME lookup for reporting
+        # Build idx->PAC and idx->NAME lookups for reporting
+        idx_pac = wdf.groupby("county_idx")["PAC"].first().to_dict()
         idx_name = wdf.groupby("county_idx")["NAME"].first().to_dict()
 
         qc_report_lines.append(
@@ -1002,22 +1028,25 @@ def run_qc_checks(
 
         if n_zero > 0:
             zero_idxs = weight_sums[weight_sums == 0].index.tolist()
-            zero_names = [idx_name.get(i, f"idx={i}") for i in zero_idxs[:5]]
+            zero_info = [f"PAC={idx_pac.get(i, '?')} NAME={idx_name.get(i, '?')}"
+                         for i in zero_idxs[:5]]
             qc_report_lines.append(
-                f"    Zero-weight counties: {zero_names}"
+                f"    Zero-weight counties: {zero_info}"
                 + ("..." if len(zero_idxs) > 5 else ""))
             weight_issues.append(f"ZERO_WEIGHT: {wf.stem}: {len(zero_idxs)} counties")
 
         if n_partial > 0:
             partial = weight_sums[(weight_sums > 0) & (weight_sums < 0.99)]
-            top5 = {idx_name.get(k, f"idx={k}"): v for k, v in partial.nsmallest(5).items()}
+            top5 = {f"PAC={idx_pac.get(k, '?')}": v
+                    for k, v in partial.nsmallest(5).items()}
             qc_report_lines.append(
                 f"    Partial-coverage counties (top 5): {top5}"
             )
 
         if n_over_one > 0:
             over = weight_sums[weight_sums > 1.01]
-            top5 = {idx_name.get(k, f"idx={k}"): v for k, v in over.nlargest(5).items()}
+            top5 = {f"PAC={idx_pac.get(k, '?')}": v
+                    for k, v in over.nlargest(5).items()}
             qc_report_lines.append(
                 f"    Over-1 counties: {top5}"
             )
@@ -1032,7 +1061,7 @@ def run_qc_checks(
 
         tbl = pq.read_table(str(out_path))
         n_rows = len(tbl)
-        n_counties = len(tbl.column("NAME").unique().to_pylist())
+        n_counties = len(tbl.column("PAC").unique().to_pylist())
         temp_col = tbl.column("tas_mean_k").to_numpy()
 
         temp_min = float(np.nanmin(temp_col))
